@@ -691,7 +691,14 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
   font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;overflow:hidden}
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 #map{position:fixed;inset:0;background:#1a1f27}
-.leaflet-container{background:#1a1f27;font:inherit}
+/* Fond quadrillé visible même si les tuiles ne chargent pas (réseau faible) */
+.leaflet-container{font:inherit;background:#1a1f27 repeating-linear-gradient(0deg,transparent 0 47px,#232a35 47px 49px),repeating-linear-gradient(90deg,transparent 0 47px,#232a35 47px 49px)}
+/* Carte OpenStreetMap passée en thème nuit */
+.tiles-night{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.55)}
+.cityTag{position:absolute;transform:translate(-50%,-140%);white-space:nowrap;background:rgba(14,17,22,.82);color:var(--txt);border:1px solid var(--line);
+  padding:4px 9px;border-radius:99px;font-size:12px;font-weight:700;pointer-events:none}
+.recenter{position:fixed;right:12px;z-index:550;width:46px;height:46px;border-radius:50%;background:var(--card);border:1px solid var(--line);
+  font-size:20px;box-shadow:var(--shadow);display:grid;place-items:center;color:var(--acc);bottom:calc(var(--smallH,48vh) + 12px)}
 .leaflet-control-attribution{background:rgba(14,17,22,.7)!important;color:#8a93a3!important;font-size:9px!important}
 .leaflet-control-attribution a{color:#a9b3c3!important}
 .leaflet-top.leaflet-left{display:none}
@@ -724,7 +731,8 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   box-shadow:0 -10px 30px rgba(0,0,0,.5);padding:8px 14px calc(var(--safe-b) + 92px);max-height:72vh;overflow-y:auto;
   transition:max-height .3s ease;overscroll-behavior:contain}
 .sheet.small{max-height:var(--smallH,48vh)}
-.sheet.small #demoBanner{display:none}
+.sheet.small #demoBanner,.sheet.small .name .addr{display:none}
+.sheet.small .go{padding:13px;margin-top:10px}.sheet.small .q{margin-bottom:6px}
 .grab{width:42px;height:5px;border-radius:9px;background:var(--line);margin:2px auto 10px}
 .q{font-size:13px;color:var(--mut);margin:0 2px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
 .hero{background:var(--card);border-radius:var(--r);padding:14px;border:1px solid var(--line)}
@@ -855,6 +863,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
   <div class="fuels" id="fuels" role="group" aria-label="Mon carburant"></div>
 </header>
 
+<button class="recenter" id="bCenter" aria-label="Recentrer la carte">◎</button>
 <div class="toast" id="toast" role="status"><span class="em" id="tEm">⛽</span><div id="tTxt"></div></div>
 
 <section class="sheet small" id="sheet">
@@ -3393,12 +3402,27 @@ function score(s){ // plus petit = meilleur : la dispo d'abord, puis le temps de
 }
 
 /* ---------- carte ---------- */
+/* Fonds de carte gratuits et sans clé, essayés dans l'ordre. Si l'un échoue, on passe au suivant ;
+   s'ils échouent tous, le fond quadrillé reste visible avec les stations. */
+const BASEMAPS = [
+  {url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opt: {maxZoom: 19}},
+  {url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", opt: {maxZoom: 19, subdomains: "abc"}}
+];
+let base = null, baseIdx = 0;
+function setBasemap(i){
+  if (base) base.remove();
+  baseIdx = i; if (i >= BASEMAPS.length) return;
+  let ok = 0, ko = 0;
+  base = L.tileLayer(BASEMAPS[i].url, {...BASEMAPS[i].opt, className: "tiles-night",
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'})
+    .on("tileload", () => ok++)
+    .on("tileerror", () => { if (++ko >= 4 && ok == 0) setBasemap(baseIdx + 1); })
+    .addTo(map);
+}
+let cityTag = null;
 function initMap(center){
   map = L.map("map", {zoomControl: false, attributionControl: true}).setView(center, 15);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19, subdomains: "abcd",
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>'
-  }).addTo(map);
+  setBasemap(0);
   layer = L.layerGroup().addTo(map);
   map.on("click", () => $("#sheet").classList.add("small"));
 }
@@ -3415,7 +3439,9 @@ function drawPins(best){
   });
   if (me){
     if (meMarker) meMarker.remove();
-    meMarker = L.marker(me, {icon: L.divIcon({className: "", html: '<div class="me"></div>', iconSize: [0, 0]}), interactive: false}).addTo(map);
+    // Point bleu : votre position, ou le centre de la ville choisie avec son nom
+    const tag = zone.gps ? "Vous êtes ici" : "Centre · " + esc(zone.name);
+    meMarker = L.marker(me, {icon: L.divIcon({className: "", html: `<div class="me"></div><div class="cityTag">${tag}</div>`, iconSize: [0, 0]}), interactive: false, zIndexOffset: -500}).addTo(map);
   }
 }
 
@@ -3486,7 +3512,7 @@ function render(fit){
     const target = [shown.lat, shown.lon];
     const smallH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300;
     const room = window.innerHeight - smallH - document.querySelector('.top').offsetHeight; // hauteur de carte visible
-    if (fit && me && room < 200){ map.setView(target, 15, {animate: false}); map.panTo(offsetCenter(target), {animate: false}); }
+    if (fit && me && room < 200){ map.setView(target, 14, {animate: false}); map.panTo(offsetCenter(target), {animate: false}); }
     else if (fit && me) map.fitBounds(L.latLngBounds([me, target, ...usable.slice(0, 6).map(x => [x.lat, x.lon])]).pad(.15), {paddingBottomRight: [20, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300], paddingTopLeft: [20, document.querySelector('.top').offsetHeight + 10], maxZoom: 16});
     else map.panTo(offsetCenter(target), {animate: true});
   }
@@ -3752,10 +3778,21 @@ function setZone(z){
   zone = z; store.set("zone", z.gps ? "" : z.name);
   map.setView(z.c, 14); load();
 }
+let watchId = null, lastLoadAt = null, lastDraw = 0;
+function follow(){ // en mode « autour de moi », le point bleu suit le chauffeur ; au-delà de 1,5 km on recharge les stations
+  if (watchId != null) navigator.geolocation.clearWatch(watchId);
+  watchId = navigator.geolocation.watchPosition(p => {
+    if (!zone.gps) return;
+    const pos = [p.coords.latitude, p.coords.longitude];
+    if (lastLoadAt && km(lastLoadAt, pos) > 1.5){ zone.c = pos; lastLoadAt = pos; load(); return; }
+    if (Date.now() - lastDraw < 8000) return;
+    lastDraw = Date.now(); me = pos; zone.c = pos; render(false);
+  }, () => {}, {enableHighAccuracy: true, maximumAge: 15000});
+}
 function useGps(){
   $("#src").textContent = "Localisation…";
   navigator.geolocation.getCurrentPosition(
-    p => setZone({name: "Autour de moi", c: [p.coords.latitude, p.coords.longitude], r: 4, gps: true, group: "", short: ""}),
+    p => { const c = [p.coords.latitude, p.coords.longitude]; lastLoadAt = c; setZone({name: "Autour de moi", c, r: 4, gps: true, group: "", short: ""}); follow(); },
     () => { toast("📍", "<b>Position refusée ou indisponible</b>Choisissez une ville dans la liste."); setZone(zone.gps ? DEFAULT_ZONE : zone); openZone(); },
     {enableHighAccuracy: true, timeout: 8000, maximumAge: 60000});
 }
@@ -3775,6 +3812,7 @@ function openZone(){
 }
 function closeModals(){ document.querySelectorAll(".modal.open").forEach(m => m.classList.remove("open")); }
 $("#bZone").onclick = openZone;
+$("#bCenter").onclick = () => { if (zone.gps) useGps(); else { sel = null; render(true); } };
 
 function start(how){
   $("#intro").classList.add("hidden"); store.set("seen", true);
