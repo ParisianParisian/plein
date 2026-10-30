@@ -3468,7 +3468,7 @@ function render(fit){
   const shown = sel && usable.includes(sel) ? sel : best;
   const f = FUELS.find(x => x.k == fuel).label;
   const pres = zone.gps ? "près de vous" : esc(prep(zone.name));
-  $("#question").innerHTML = shown === best ? `Le meilleur plein de ${f} ${pres}` : `Station choisie · ${f} <button id="bBack" style="float:right;color:var(--acc);font-weight:700;text-transform:none;letter-spacing:0">← La meilleure</button>`;
+  $("#question").innerHTML = shown === best ? `Le meilleur plein de ${f} ${pres}` : `Station choisie · ${f}`;
   const bk = $("#bBack"); if (bk) bk.onclick = () => { sel = null; render(true); };
 
   if (!shown){
@@ -3489,7 +3489,11 @@ function render(fit){
       ${trustLine(e)}
       ${e.st == "ko" ? `<button class="go" style="background:var(--card2)" id="bBest">→ Station dispo la plus proche</button>`
                      : `<a class="go" href="${waze(shown)}" target="_blank" rel="noopener">🧭 Y aller avec Waze</a>`}`;
-    const bb = $("#bBest"); if (bb) bb.onclick = () => { sel = null; render(true); };
+    const bb = $("#bBest"); if (bb && shown !== best && shown._e.st == "ko") bb.remove(); else if (bb) bb.onclick = () => { sel = null; render(true); };
+    if (shown !== best){
+      $("#hero").insertAdjacentHTML("beforeend", `<button class="go" id="bBackBest" style="background:var(--card2);margin-top:8px;font-size:16px">↩ Revenir à la meilleure station</button>`);
+      $("#bBackBest").onclick = () => { sel = null; render(true); $("#sheet").scrollTo({top: 0, behavior: "smooth"}); };
+    }
   }
 
   $("#otherQ").textContent = `${usable.length} stations suivies à moins de ${zone.r || 4} km${zone.gps ? "" : " de " + zone.name} · de la meilleure à la moins bonne`;
@@ -3501,9 +3505,9 @@ function render(fit){
       <span class="rt">${mins(s._d)} min<span>${e.st=="ko" ? "—" : price(s.prices[fuel]) + " €"}</span></span>
     </button>`;
   }).join("");
-  document.querySelectorAll(".item").forEach(b => b.onclick = () => {
+  $("#list").querySelectorAll(".item").forEach(b => b.onclick = () => {
     sel = stations.find(s => s.id == b.dataset.id); render(false);
-    $("#sheet").classList.add("small"); $("#sheet").scrollTop = 0;
+    $("#sheet").scrollTo({top: 0, behavior: "smooth"}); // le panneau reste ouvert : on peut enchaîner sur une autre station
   });
 
   drawPins(best);
@@ -3595,9 +3599,10 @@ function openReport(){
     p.querySelectorAll(".choice").forEach(b => b.onclick = () => step2(b.dataset.st));
   };
   const pick = () => {
-    p.innerHTML = `<button class="close" data-close>✕</button><h2>Quelle station ?</h2><p class="sub">Les plus proches de vous.</p>` +
-      near.slice(0, 6).map(s => `<button class="item" data-id="${esc(s.id)}"><span class="ic ${s._e.st}">${ST[s._e.st].ic}</span><span class="mid"><b>${esc(s.name)}</b><span>${esc(s.addr)}</span></span><span class="rt">${fmtKm(km(origin,[s.lat,s.lon]))}</span></button>`).join("");
-    p.querySelectorAll(".item").forEach(b => b.onclick = () => { target = stations.find(s => s.id == b.dataset.id); step1(); });
+    p.innerHTML = `<button class="close" data-close>✕</button><button class="ghost" id="pkBack" style="padding:6px 0;color:var(--acc);font-weight:700">← Retour</button><h2>Quelle station ?</h2><p class="sub">Les plus proches. Celle en bleu est sélectionnée.</p>` +
+      [target, ...near.filter(s => s !== target).slice(0, 7)].map(s => `<button class="item" data-id="${esc(s.id)}" style="${s === target ? "background:var(--card);outline:2px solid var(--acc)" : ""}"><span class="ic ${s._e.st}">${ST[s._e.st].ic}</span><span class="mid"><b>${esc(s.name)}</b><span>${esc(s.addr)}</span></span><span class="rt">${fmtKm(km(origin,[s.lat,s.lon]))}</span></button>`).join("");
+    p.querySelectorAll(".item").forEach(b => b.onclick = () => { target = stations.find(s => s.id == b.dataset.id) || target; step1(); });
+    $("#pkBack").onclick = step1;
   };
   const step2 = st => {
     if (st == "ko") return finish(st, "", false);
@@ -3737,6 +3742,7 @@ function demoLife(){
   const who = ["Karim","Sofiane","Mamadou","Lucas","Nadia","Yacine","Thomas","Moussa"];
   let i = 0;
   const tick = () => {
+    if (document.querySelector(".modal.open")) return; // ne jamais rafraîchir sous les doigts du chauffeur
     const cand = stations.filter(s => s._e && s._e.st != "none" && s !== sel).slice(0, 15);
     if (!cand.length) return;
     const s = cand[(i*5 + 3) % cand.length];
@@ -3755,7 +3761,7 @@ function setSource(live){
   $("#src").textContent = live ? "En direct" : "Démo";
   $("#zName").textContent = zone.name;
   const b = $("#demoBanner");
-  const msg = !live ? `Données officielles injoignables : stations d'exemple autour de ${zone.name}.`
+  const msg = !live ? `Données officielles injoignables : stations d'exemple ${prep(zone.name).replace(/^à |^au /, m => m == "au " ? "autour du " : "autour de ").replace(/^près de /, "autour de ")}.`
             : vitrine ? "Mode présentation : stations et prix réels, signalements d'exemple." : "";
   b.textContent = msg; b.classList.toggle("hidden", !msg);
 }
