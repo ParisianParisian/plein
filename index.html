@@ -831,6 +831,14 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
   .eta b{font-size:20px}.name{font-size:16px;margin-top:6px}.trust{margin-top:8px}.go{padding:13px;font-size:17px}
   .cta{padding:13px 6px;font-size:15px}.top{padding-bottom:4px}.brand{margin-bottom:6px}.fuel{padding:8px 13px}
 }
+.zone{display:flex;align-items:center;gap:4px;margin-top:1px;font-size:13px;color:var(--txt);font-weight:700;padding:0;max-width:52vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.zone span{overflow:hidden;text-overflow:ellipsis}.zone i{font-style:normal;color:var(--acc)}
+.zgroup{margin:16px 0 6px;font-size:13px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:flex;gap:8px;align-items:center}
+.zgroup em{font-style:normal;width:22px;height:22px;border-radius:50%;background:var(--card2);display:grid;place-items:center;color:var(--txt);font-size:12px}
+.chip.here{border-color:var(--acc)}
+.gps{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-weight:700;text-align:left}
+.switch{display:flex;align-items:center;gap:12px;margin:18px 0 4px;padding:12px 14px;border-radius:14px;background:var(--card2);font-size:14px}
+.switch input{width:22px;height:22px;accent-color:var(--acc);flex:0 0 22px}
 .hidden{display:none!important}
 </style>
 </head>
@@ -841,7 +849,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
 <header class="top">
   <div class="brand">
     <div class="logo" aria-hidden="true">P</div>
-    <div><b>Plein</b><small>Le carburant dispo, maintenant</small></div>
+    <div style="min-width:0"><b>Plein</b><button class="zone" id="bZone" aria-label="Changer de ville">📍 <span id="zName">Saint-Germain-en-Laye</span> <i>▾</i></button></div>
     <span class="pill" id="src">…</span>
   </div>
   <div class="fuels" id="fuels" role="group" aria-label="Mon carburant"></div>
@@ -860,7 +868,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
     <span><i style="background:var(--ko)"></i>Rupture</span>
     <span><i style="background:var(--unk)"></i>Pas d'info récente</span>
   </div>
-  <div class="q" style="margin-top:16px">Autres stations, de la meilleure à la moins bonne</div>
+  <div class="q" style="margin-top:16px" id="otherQ">Autres stations, de la meilleure à la moins bonne</div>
   <div class="list" id="list"></div>
   <p class="note">Prix et ruptures officiels : <a href="https://www.prix-carburants.gouv.fr" target="_blank" rel="noopener">prix-carburants.gouv.fr</a> (Licence Ouverte 2.0), mis à jour toutes les 10 min. Files d'attente et limites de litres : signalements des chauffeurs. Version bêta.</p>
 </section>
@@ -879,11 +887,15 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
 <div class="modal" id="mBeta" role="dialog" aria-modal="true" aria-labelledby="bT">
   <div class="panel" id="pBeta"></div>
 </div>
+<!-- Ville -->
+<div class="modal" id="mZone" role="dialog" aria-modal="true" aria-labelledby="zT">
+  <div class="panel" id="pZone"></div>
+</div>
 <!-- Partager -->
 <div class="modal" id="mShare" role="dialog" aria-modal="true">
   <div class="panel" style="text-align:center">
     <button class="close" data-close>✕</button>
-    <h2>Scannez pour essayer</h2>
+    <h2 id="shT">Scannez pour essayer</h2>
     <p class="sub">Le chauffeur ouvre son appareil photo, vise le code, et l'appli s'ouvre chez lui.</p>
     <div id="qr"></div>
     <button class="primary" id="bNative">Envoyer le lien (WhatsApp, SMS…)</button>
@@ -892,7 +904,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
 
 <!-- Accueil -->
 <div class="intro hidden" id="intro">
-  <div class="brand"><div class="logo">P</div><div><b>Plein</b><small>Bêta · chauffeurs VTC d'Île-de-France</small></div></div>
+  <div class="brand"><div class="logo">P</div><div><b>Plein</b><small>Bêta · VTC de Saint-Germain-en-Laye et alentours</small></div></div>
   <h1>La pompe qui a <span>votre carburant</span>, sans file, en 1 coup d'œil.</h1>
   <p>Pas de compte, pas de pub. Ouvrez, regardez, roulez.</p>
   <div class="steps">
@@ -901,7 +913,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
     <div class="step"><em>👆</em><div><b>3. Vous aidez les autres</b><span>À l'arrêt, un seul tap : dispo, file ou rupture.</span></div></div>
   </div>
   <button class="primary" id="bStart">Voir les stations autour de moi</button>
-  <button class="ghost" id="bDemo">Voir une démo sans ma position</button>
+  <button class="ghost" id="bDemo">Choisir une ville : Saint-Germain, 92, 93, 94, Paris</button>
 </div>
 
 <script>/* @preserve
@@ -3215,7 +3227,29 @@ var qrcode = function() {
 const SHEET_URL = window.PLEIN_SHEET_URL || "";
 
 const API = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records";
-const PARIS = [48.8443, 2.3740]; // Gare de Lyon / Bercy, pour la démo
+/* Zones, dans l'ordre de la tournée terrain : Saint-Germain d'abord, puis 92, 93, 94 et Paris.
+   Coordonnées approximatives du centre de chaque ville (elles servent seulement à centrer la carte). */
+const ZONES = [
+  {g: "Saint-Germain-en-Laye et voisines (78)", short: "78", r: 5, items: [
+    ["Saint-Germain-en-Laye", 48.8989, 2.0938], ["Fourqueux", 48.8869, 2.0636], ["Le Pecq", 48.8936, 2.1056],
+    ["Mareil-Marly", 48.8814, 2.0739], ["Le Port-Marly", 48.8800, 2.1094], ["Marly-le-Roi", 48.8676, 2.0937],
+    ["L'Étang-la-Ville", 48.8692, 2.0569], ["Le Vésinet", 48.8933, 2.1300], ["Chambourcy", 48.9061, 2.0408],
+    ["Croissy-sur-Seine", 48.8786, 2.1409], ["Chatou", 48.8897, 2.1576], ["Poissy", 48.9294, 2.0456],
+    ["Montesson", 48.9094, 2.1497], ["Le Mesnil-le-Roi", 48.9381, 2.1253], ["Maisons-Laffitte", 48.9469, 2.1453],
+    ["Achères", 48.9603, 2.0689]]},
+  {g: "Hauts-de-Seine (92)", short: "92", r: 4, items: [
+    ["Rueil-Malmaison", 48.8770, 2.1890], ["Nanterre", 48.8924, 2.2069], ["La Défense", 48.8920, 2.2383], ["Boulogne-Billancourt", 48.8352, 2.2410]]},
+  {g: "Seine-Saint-Denis (93)", short: "93", r: 4, items: [
+    ["Saint-Denis", 48.9362, 2.3574], ["Aubervilliers", 48.9146, 2.3821], ["Bobigny", 48.9077, 2.4397], ["Montreuil", 48.8611, 2.4437]]},
+  {g: "Val-de-Marne (94)", short: "94", r: 4, items: [
+    ["Vincennes", 48.8474, 2.4392], ["Ivry-sur-Seine", 48.8156, 2.3849], ["Créteil", 48.7904, 2.4556], ["Aéroport d'Orly", 48.7262, 2.3652]]},
+  {g: "Paris", short: "75", r: 3, items: [
+    ["Gare Saint-Lazare", 48.8763, 2.3254], ["Gare du Nord", 48.8809, 2.3553], ["Gare de Lyon", 48.8443, 2.3740],
+    ["Gare Montparnasse", 48.8412, 2.3205], ["Étoile", 48.8738, 2.2950]]}
+];
+const findZone = name => { for (const z of ZONES) for (const it of z.items) if (it[0] == name) return {name, c: [it[1], it[2]], r: z.r, group: z.g, short: z.short}; return null; };
+const DEFAULT_ZONE = findZone("Saint-Germain-en-Laye");
+const PARIS = DEFAULT_ZONE.c; // point de repli si la position n'est pas disponible
 const FUELS = [
   {k:"gazole", label:"Gazole", api:"Gazole"},
   {k:"e10",    label:"SP95-E10", api:"E10"},
@@ -3258,36 +3292,43 @@ if (!deviceId){ deviceId = Math.random().toString(36).slice(2, 10); store.set("d
 /* ---------- état ---------- */
 let fuel = store.get("fuel", "gazole");
 let me = null, stations = [], sel = null, mode = "demo", map, layer, meMarker;
+let zone = findZone(store.get("zone", "")) || DEFAULT_ZONE; // ville choisie, ou « autour de moi »
+let vitrine = store.get("vitrine", false); // mode présentation : signalements d'exemple, clairement marqués
 
 /* ---------- données de démonstration (fictives, réalistes) ---------- */
-function demoStations(c){
-  const names = ["Station Bercy","Relais Quai de la Rapée","Station Daumesnil","Station Diderot","Relais Austerlitz",
-                 "Station Ledru-Rollin","Station Nation","Relais Charenton","Station Tolbiac","Station Bastille","Relais Picpus","Station Ivry Quai"];
-  const streets = ["bd de Bercy","quai de la Rapée","av. Daumesnil","bd Diderot","bd de l'Hôpital","av. Ledru-Rollin",
-                   "place de la Nation","rue de Charenton","rue de Tolbiac","bd Beaumarchais","bd de Picpus","quai d'Ivry"];
-  // Scénario fixe : une crise « crédible » avec un mix vert/orange/rouge
-  const scen = ["ok","ko","wait","ok","ko","unk","wait","ok","ko","ok","unk","ko"];
+function demoStations(c, label){
+  // Repli si le flux officiel ne répond pas : stations d'exemple, nommées comme telles
   const off = [[.004,.006],[-.006,-.004],[.009,.012],[.006,-.005],[-.004,-.012],[.012,-.002],[.003,.026],[-.011,.016],[-.016,-.006],[.014,-.008],[.002,.019],[-.02,.01]];
   const now = Date.now();
-  return names.map((n, i) => {
-    const s = scen[i], base = 2.31 + (i%5)*0.03;
+  return off.map((o, i) => {
+    const base = 2.31 + (i%5)*0.03;
     const prices = {gazole: base, e10: base+0.04, sp98: base+0.13, e85: i%3 ? 1.09 + i*0.01 : null, gplc: i%4==1 ? 1.29 : null};
-    const official = {}, reports = [];
-    FUELS.forEach(f => { official[f.k] = !prices[f.k] ? "none" : (s=="ko" && i!=1 && i!=8 ? "ko" : "ok"); }); // 1 et 8 : rupture que la station n'a pas déclarée
-    if (s=="ok")  reports.push({st:"ok",  q:"0",  t: now - (3+i)*60000, n: 2 + i%3});
-    if (s=="wait")reports.push({st:"wait",q:"10+",t: now - (6+i)*60000, n: 3});
-    if (s=="ko")  reports.push({st:"ko",  t: now - (12+i)*60000, n: 1 + i%2});
-    if (s=="unk") FUELS.forEach(f => { if (official[f.k]=="ok") official[f.k] = "old"; });
-    return {id:"demo"+i, name:n, addr:(10+i*7)+" "+streets[i]+", Paris", lat:c[0]+off[i][0], lon:c[1]+off[i][1],
-            prices, official, reports, h24: i%2==0, maj: now - (s=="unk" ? 50*3600000 : (8+i)*60000)};
+    const official = {};
+    FUELS.forEach(f => { official[f.k] = prices[f.k] ? "ok" : "none"; });
+    return {id:"demo"+i, name:"Station exemple " + String.fromCharCode(65+i), addr: label + " · position fictive", lat:c[0]+o[0], lon:c[1]+o[1],
+            prices, official, reports: [], h24: i%2==0, maj: now - (8+i)*60000};
   });
+}
+/* Mode présentation : on pose des signalements d'exemple sur les stations (réelles ou fictives), marqués « exemple » */
+function addExamples(){
+  const origin = me || PARIS, now = Date.now();
+  const scen = ["ok","ko","wait","ok","ko","unk","wait","ok","ko","ok"];
+  stations.forEach(s => s.reports = s.reports.filter(r => !r.ex));
+  stations.filter(s => s.official[fuel] && s.official[fuel] != "none")
+    .sort((a, b) => km(origin, [a.lat, a.lon]) - km(origin, [b.lat, b.lon]))
+    .slice(0, scen.length).forEach((s, i) => {
+      const st = scen[i];
+      if (st == "ok")   s.reports.push({st:"ok",  q:"0",  t: now - (3+i)*60000, n: 2 + i%3, ex: true});
+      if (st == "wait") s.reports.push({st:"wait",q:"10+",t: now - (6+i)*60000, n: 3, ex: true, lim: i == 2});
+      if (st == "ko")   s.reports.push({st:"ko",  t: now - (12+i)*60000, n: 2, ex: true}); // l'officiel peut encore dire « dispo » : rupture non déclarée
+    });
 }
 
 /* ---------- données réelles : flux officiel de l'État ---------- */
 const toList = v => Array.isArray(v) ? v : (typeof v == "string" && v ? v.split(/[;,|]/).map(x => x.trim()) : []);
-async function liveStations(c){
-  const where = `within_distance(geom, geom'POINT(${c[1]} ${c[0]})', 4km)`;
-  const url = API + "?limit=80&where=" + encodeURIComponent(where);
+async function liveStations(c, radius){
+  const where = `within_distance(geom, geom'POINT(${c[1]} ${c[0]})', ${radius || 4}km)`;
+  const url = API + "?limit=100&where=" + encodeURIComponent(where);
   const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 8000);
   const r = await fetch(url, {signal: ctl.signal}); clearTimeout(to);
   if (!r.ok) throw new Error("API " + r.status);
@@ -3339,7 +3380,7 @@ function stateOf(s){
   const rp = s.reports.filter(r => Date.now() - r.t < 3*3600000).sort((a, b) => b.t - a.t)[0];
   if (rp && rp.t > (off == "ko" ? 0 : Date.now() - 90*60000)) { // un signalement récent passe devant
     const fresh = Date.now() - rp.t < 30*60000;
-    return {st: rp.st, off, by: "drivers", t: rp.t, n: rp.n || 1, q: rp.q, lim: rp.lim, conf: fresh && (rp.n||1) >= 2 ? "high" : "mid"};
+    return {st: rp.st, off, ex: rp.ex, by: "drivers", t: rp.t, n: rp.n || 1, q: rp.q, lim: rp.lim, conf: fresh && (rp.n||1) >= 2 ? "high" : "mid"};
   }
   if (off == "ko") return {st: "ko", by: "official", t: s.maj, conf: "mid"};
   if (off == "old") return {st: "unk", by: "official", t: s.maj, conf: "low"};
@@ -3384,6 +3425,7 @@ function trustLine(e){
     const who = e.n > 1 ? `${e.n} chauffeurs` : "1 chauffeur";
     const col = e.conf == "high" ? "var(--ok)" : "var(--wait)";
     const gap = e.st == "ko" && e.off != "ko" ? `<div class="trust" style="color:var(--wait)">⚠︎ Le site officiel affiche encore « disponible » : rupture non déclarée.</div>` : "";
+    if (e.ex) return `<div class="trust"><span class="dot" style="background:var(--acc)"></span>Exemple de signalement (mode présentation)</div>` + gap;
     return `<div class="trust"><span class="dot" style="background:${col}"></span>Vu par ${who} ${ago(e.t)}${e.conf=="high" ? " · fiable" : ""}</div>` + gap;
   }
   if (e.conf == "low") return `<div class="trust"><span class="dot" style="background:var(--unk)"></span>Pas de mise à jour officielle depuis ${ago(e.t).replace("il y a ","")}. À vérifier.</div>`;
@@ -3399,7 +3441,8 @@ function render(fit){
   const best = usable.find(s => s._e.st == "ok" || s._e.st == "wait") || usable[0];
   const shown = sel && usable.includes(sel) ? sel : best;
   const f = FUELS.find(x => x.k == fuel).label;
-  $("#question").innerHTML = shown === best ? `La meilleure option pour du ${f}` : `Station choisie · ${f} <button id="bBack" style="float:right;color:var(--acc);font-weight:700;text-transform:none;letter-spacing:0">← La meilleure</button>`;
+  const pres = zone.gps ? "près de vous" : esc(prep(zone.name));
+  $("#question").innerHTML = shown === best ? `Le meilleur plein de ${f} ${pres}` : `Station choisie · ${f} <button id="bBack" style="float:right;color:var(--acc);font-weight:700;text-transform:none;letter-spacing:0">← La meilleure</button>`;
   const bk = $("#bBack"); if (bk) bk.onclick = () => { sel = null; render(true); };
 
   if (!shown){
@@ -3409,7 +3452,7 @@ function render(fit){
     $("#hero").innerHTML = `
       <div class="row">
         <span class="status ${e.st}">${st.ic} ${e.st=="ko" ? "Rupture de " + f : st.txt}</span>
-        <div class="eta"><b>${mins(shown._d)} min</b> · ${fmtKm(shown._d)}</div>
+        <div class="eta"><b>${mins(shown._d)} min</b> · ${fmtKm(shown._d)}${zone.gps ? "" : `<div style="font-size:11px;text-align:right">depuis le centre</div>`}</div>
       </div>
       <div class="name">${esc(shown.name)} <span class="addr">${esc(shown.addr)}</span></div>
       <div class="facts">
@@ -3423,6 +3466,7 @@ function render(fit){
     const bb = $("#bBest"); if (bb) bb.onclick = () => { sel = null; render(true); };
   }
 
+  $("#otherQ").textContent = `${usable.length} stations suivies à moins de ${zone.r || 4} km${zone.gps ? "" : " de " + zone.name} · de la meilleure à la moins bonne`;
   $("#list").innerHTML = usable.filter(s => s !== shown).slice(0, 12).map(s => {
     const e = s._e;
     return `<button class="item" data-id="${esc(s.id)}">
@@ -3440,7 +3484,10 @@ function render(fit){
   fitSheet();
   if (shown){
     const target = [shown.lat, shown.lon];
-    if (fit && me) map.fitBounds(L.latLngBounds([me, target]).pad(.3), {paddingBottomRight: [20, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300], paddingTopLeft: [20, document.querySelector('.top').offsetHeight + 10], maxZoom: 16});
+    const smallH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300;
+    const room = window.innerHeight - smallH - document.querySelector('.top').offsetHeight; // hauteur de carte visible
+    if (fit && me && room < 200){ map.setView(target, 15, {animate: false}); map.panTo(offsetCenter(target), {animate: false}); }
+    else if (fit && me) map.fitBounds(L.latLngBounds([me, target, ...usable.slice(0, 6).map(x => [x.lat, x.lon])]).pad(.15), {paddingBottomRight: [20, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300], paddingTopLeft: [20, document.querySelector('.top').offsetHeight + 10], maxZoom: 16});
     else map.panTo(offsetCenter(target), {animate: true});
   }
 }
@@ -3450,6 +3497,16 @@ function fitSheet(){ // le panneau replié montre toujours la carte de la meille
   const need = h.offsetTop + h.offsetHeight + dock.offsetHeight + 4;
   if (!was) sh.classList.remove("small");
   document.documentElement.style.setProperty("--smallH", Math.min(need, window.innerHeight*0.7) + "px");
+}
+function prep(n){ // « à Poissy », « au Pecq », « à La Défense » → « à la Défense », « près de la gare du Nord »
+  if (/^Gare /.test(n)) return "près de la g" + n.slice(1);
+  if (/^Aéroport/.test(n)) return "près de l'a" + n.slice(1);
+  if (n == "Étoile") return "près de l'Étoile";
+  if (/^Le /.test(n)) return "au " + n.slice(3);
+  if (/^La /.test(n)) return "à la " + n.slice(3);
+  if (/^Les /.test(n)) return "aux " + n.slice(4);
+  if (/^L'/.test(n)) return "à l'" + n.slice(2);
+  return "à " + n;
 }
 function offsetCenter(ll){ // la station doit apparaître au-dessus du panneau, pas dessous
   const p = map.project(ll, map.getZoom()); const sh = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--smallH')) || 300;
@@ -3463,13 +3520,14 @@ function renderFuels(){
   document.querySelectorAll(".fuel").forEach(b => b.onclick = () => {
     fuel = b.dataset.k; store.set("fuel", fuel); sel = null;
     stations.forEach(s => s.reports = s.reports.filter(r => !r.fuel || r.fuel == fuel));
+    if (vitrine) addExamples();
     renderFuels(); render(true);
   });
 }
 
 /* ---------- envoi vers Google Sheet (avec file d'attente hors-ligne) ---------- */
 function send(kind, data){
-  const row = {kind, t: new Date().toISOString(), device: deviceId, mode, ...data};
+  const row = {kind, t: new Date().toISOString(), device: deviceId, mode: vitrine ? mode + "-presentation" : mode, ...data};
   const q = store.get("queue", []); q.push(row); store.set("queue", q);
   flush();
 }
@@ -3538,7 +3596,7 @@ function openReport(){
     const rp = {stationId: target.id, station: target.name, address: target.addr, fuel, st, q, lim, t: Date.now()};
     const mine = store.get("myReports", []); mine.push(rp); store.set("myReports", mine.slice(-50));
     target.reports.push({st, q, lim, t: Date.now(), n: 1});
-    send("signalement", {stationId: target.id, station: target.name, adresse: target.addr, carburant: fuel, etat: st, file: q, limite: lim ? "oui" : "non",
+    send("signalement", {zone: zone.name, exemple: mode == "demo" ? "station fictive" : "", stationId: target.id, station: target.name, adresse: target.addr, carburant: fuel, etat: st, file: q, limite: lim ? "oui" : "non",
                          lat: +target.lat.toFixed(4), lon: +target.lon.toFixed(4)});
     const count = mine.length;
     p.innerHTML = `<div class="done"><div class="em">🙌</div><h2>C'est envoyé</h2>
@@ -3566,7 +3624,8 @@ function openBeta(){
     <label class="f">Carburant</label>
     <div class="chips" id="cF">${FUELS.map(x => `<button class="chip" data-v="${x.k}">${x.label}</button>`).join("")}<button class="chip" data-v="hybride">Hybride</button></div>
     <label class="f" for="iZ">Où roulez-vous le plus ?</label>
-    <select class="t" id="iZ"><option>Paris</option><option>Petite couronne (92, 93, 94)</option><option>Aéroports (CDG, Orly)</option><option>Grande couronne</option></select>
+    <select class="t" id="iZ">${ZONES.map(z => `<option ${z.g==zone.group ? "selected" : ""}>${esc(z.g)}</option>`).join("")}<option>Aéroports (CDG, Orly)</option><option>Ailleurs en Île-de-France</option></select>
+    <label class="f" for="iV">Ville ou quartier (facultatif)</label><input class="t" id="iV" placeholder="ex. Le Pecq" value="${zone.gps ? "" : esc(zone.name)}">
     <label class="f">Prêt à payer 4,99 €/mois après le test ?</label>
     <div class="chips" id="cW"><button class="chip" data-v="oui">Oui</button><button class="chip" data-v="peut-etre">Peut-être</button><button class="chip" data-v="non">Non</button></div>
     <label class="consent"><input type="checkbox" id="iC"><span>J'accepte d'être recontacté(e) sur WhatsApp au sujet de la bêta. Mes données ne sont ni vendues ni partagées, et je peux demander leur suppression à tout moment.</span></label>
@@ -3592,7 +3651,7 @@ function openBeta(){
   paint();
   $("#iGo").onclick = () => {
     const row = {prenom: $("#iN").value.trim(), telephone: $("#iP").value.trim(), plateformes: plat.join(", "),
-                 carburant: fu, zone: $("#iZ").value, pret_a_payer: wtp, consentement: "oui",
+                 carburant: fu, zone: $("#iZ").value, ville: $("#iV").value.trim(), pret_a_payer: wtp, consentement: "oui",
                  source: new URLSearchParams(location.search).get("src") || "terrain"};
     store.set("beta", row); send("beta", row);
     p.innerHTML = `<div class="done"><div class="em">🎉</div><h2>Bienvenue, ${esc(row.prenom)} !</h2>
@@ -3605,11 +3664,13 @@ function openBeta(){
 
 /* ---------- fenêtre « Partager » (QR code pour le terrain) ---------- */
 function openShare(){
-  const url = location.href.split("#")[0].split("?")[0] + "?src=qr";
+  const slug = zone.gps ? "" : "&ville=" + zone.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f'’]/g, "").replace(/\s+/g, "-");
+  const url = location.href.split("#")[0].split("?")[0] + "?src=qr" + slug; // le chauffeur ouvre directement sur la même ville
   try{
     const qr = qrcode(0, "M"); qr.addData(url); qr.make();
     $("#qr").innerHTML = qr.createSvgTag({cellSize: 6, margin: 0, scalable: true});
   }catch(e){ $("#qr").textContent = url; }
+  $("#shT").textContent = zone.gps ? "Scannez pour essayer" : "Scannez : " + zone.name;
   $("#bNative").onclick = () => {
     const text = "Plein : la station la plus proche qui a ton carburant, sans file. Essaie la bêta : " + url;
     if (navigator.share) navigator.share({title: "Plein", text, url}).catch(() => {});
@@ -3643,20 +3704,22 @@ function toast(em, html){
   $("#tEm").textContent = em; $("#tTxt").innerHTML = html;
   $("#toast").classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => $("#toast").classList.remove("show"), 5000);
 }
+let lifeTimer = null;
 function demoLife(){
-  if (mode != "demo") return;
+  clearTimeout(lifeTimer); clearInterval(demoLife.iv);
+  if (!vitrine) return;
   const who = ["Karim","Sofiane","Mamadou","Lucas","Nadia","Yacine","Thomas","Moussa"];
   let i = 0;
   const tick = () => {
-    const cand = stations.filter(s => s._e && s._e.st != "none");
+    const cand = stations.filter(s => s._e && s._e.st != "none" && s !== sel).slice(0, 15);
     if (!cand.length) return;
     const s = cand[(i*5 + 3) % cand.length];
     const st = ["ko","ok","wait"][i % 3];
-    s.reports.push({st, q: st=="wait" ? "10+" : "0", t: Date.now(), n: 1});
-    toast(ST[st].ic, `<b>${who[i % who.length]} vient de signaler</b>${ST[st].txt} à ${esc(s.name)}`);
+    s.reports.push({st, q: st=="wait" ? "10+" : "0", t: Date.now(), n: 1, ex: true});
+    toast(ST[st].ic, `<b>Exemple : ${who[i % who.length]} vient de signaler</b>${ST[st].txt} · ${esc(s.name)}`);
     i++; render(false);
   };
-  setTimeout(() => { tick(); setInterval(tick, 12000); }, 5000);
+  lifeTimer = setTimeout(() => { tick(); demoLife.iv = setInterval(tick, 12000); }, 5000);
 }
 
 /* ---------- démarrage ---------- */
@@ -3664,40 +3727,71 @@ function setSource(live){
   mode = live ? "live" : "demo";
   $("#src").className = "pill" + (live ? " live" : "");
   $("#src").textContent = live ? "En direct" : "Démo";
+  $("#zName").textContent = zone.name;
   const b = $("#demoBanner");
-  if (live){ b.classList.add("hidden"); }
-  else { b.classList.remove("hidden"); b.textContent = "Mode démo : stations et signalements fictifs autour de Gare de Lyon, pour montrer le fonctionnement."; }
+  const msg = !live ? `Données officielles injoignables : stations d'exemple autour de ${zone.name}.`
+            : vitrine ? "Mode présentation : stations et prix réels, signalements d'exemple." : "";
+  b.textContent = msg; b.classList.toggle("hidden", !msg);
 }
-async function load(center, tryLive){
-  let live = false;
-  if (tryLive){
-    try{ const l = await liveStations(center); if (l.length >= 3){ stations = l; live = true; } }catch(e){ /* on bascule en démo */ }
-  }
-  if (!live) stations = demoStations(center);
+let loadSeq = 0;
+async function load(){
+  const seq = ++loadSeq, center = zone.c;
+  $("#src").className = "pill"; $("#src").textContent = "Chargement…"; $("#zName").textContent = zone.name;
+  let live = false, list = [];
+  try{ list = await liveStations(center, zone.r || 4); live = list.length >= 1; }catch(e){ window.__apiError = String(e); }
+  if (seq != loadSeq) return; // l'utilisateur a changé de ville entre-temps
+  stations = live ? list : demoStations(center, zone.name);
+  sel = null; me = center;
   setSource(live);
+  if (vitrine) addExamples();
   mergeReports(await pullReports());
   render(true);
   demoLife();
 }
-function start(useGps){
+function setZone(z){
+  zone = z; store.set("zone", z.gps ? "" : z.name);
+  map.setView(z.c, 14); load();
+}
+function useGps(){
+  $("#src").textContent = "Localisation…";
+  navigator.geolocation.getCurrentPosition(
+    p => setZone({name: "Autour de moi", c: [p.coords.latitude, p.coords.longitude], r: 4, gps: true, group: "", short: ""}),
+    () => { toast("📍", "<b>Position refusée ou indisponible</b>Choisissez une ville dans la liste."); setZone(zone.gps ? DEFAULT_ZONE : zone); openZone(); },
+    {enableHighAccuracy: true, timeout: 8000, maximumAge: 60000});
+}
+function openZone(){
+  const p = $("#pZone");
+  p.innerHTML = `<button class="close" data-close>✕</button>
+    <h2 id="zT">Où êtes-vous ?</h2>
+    <p class="sub">On commence par Saint-Germain-en-Laye et ses voisines, puis le 92, le 93, le 94 et Paris.</p>
+    ${navigator.geolocation ? `<button class="gps" id="zGps">📍 Autour de moi, avec ma position<span style="margin-left:auto;color:var(--acc)">›</span></button>` : ""}
+    ${ZONES.map((z, n) => `<div class="zgroup"><em>${n+1}</em>${esc(z.g)}</div>
+      <div class="chips">${z.items.map(it => `<button class="chip ${it[0]==zone.name ? "here" : ""}" aria-pressed="${it[0]==zone.name}" data-z="${esc(it[0])}">${esc(it[0])}</button>`).join("")}</div>`).join("")}
+    <label class="switch"><input type="checkbox" id="zVit" ${vitrine ? "checked" : ""}><span><b>Mode présentation</b><br>Ajoute des signalements d'exemple (marqués « exemple ») pour montrer le service aux chauffeurs.</span></label>`;
+  const g = $("#zGps"); if (g) g.onclick = () => { closeModals(); useGps(); };
+  p.querySelectorAll(".chip[data-z]").forEach(b => b.onclick = () => { closeModals(); setZone(findZone(b.dataset.z)); });
+  $("#zVit").onchange = e => { vitrine = e.target.checked; store.set("vitrine", vitrine); if (!vitrine) stations.forEach(s => s.reports = s.reports.filter(r => !r.ex)); else addExamples(); setSource(mode == "live"); render(false); demoLife(); };
+  open("#mZone");
+}
+function closeModals(){ document.querySelectorAll(".modal.open").forEach(m => m.classList.remove("open")); }
+$("#bZone").onclick = openZone;
+
+function start(how){
   $("#intro").classList.add("hidden"); store.set("seen", true);
-  initMap(PARIS); renderFuels();
-  if (useGps && navigator.geolocation){
-    $("#src").textContent = "Localisation…";
-    navigator.geolocation.getCurrentPosition(
-      p => { me = [p.coords.latitude, p.coords.longitude]; map.setView(me, 15); load(me, true); },
-      () => { me = PARIS; load(PARIS, false); },
-      {enableHighAccuracy: true, timeout: 8000, maximumAge: 60000});
-  } else { me = PARIS; load(PARIS, false); }
+  initMap(zone.c); renderFuels();
+  if (how == "gps" && navigator.geolocation) useGps();
+  else { if (zone.gps) zone = DEFAULT_ZONE; load(); if (how == "pick") openZone(); }
   flush();
 }
 const params = new URLSearchParams(location.search);
-if (params.has("demo")) start(false);
-else if (store.get("seen", false) && !params.has("intro")) start(true);
+if (params.has("demo")) { vitrine = true; store.set("vitrine", true); }
+if (params.get("ville")) { const z = ZONES.flatMap(g => g.items).find(it => it[0].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f'’]/g, "").replace(/\s+/g, "-") == params.get("ville").toLowerCase()); if (z) zone = findZone(z[0]); }
+if (params.has("demo") || params.get("ville")) start("zone");
+else if (store.get("seen", false) && !params.has("intro")) start(store.get("zone", "") ? "zone" : "gps");
 else {
   $("#intro").classList.remove("hidden");
-  $("#bStart").onclick = () => start(true);
-  $("#bDemo").onclick = () => start(false);
+  $("#bStart").onclick = () => start("gps");
+  $("#bDemo").onclick = () => start("pick");
 }
 </script>
 </body>
