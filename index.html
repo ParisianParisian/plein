@@ -3741,14 +3741,18 @@ function openReport(){
     p.innerHTML = `<div class="done"><div class="em">${moving ? "🛑" : "🙌"}</div><h2>C'est envoyé</h2>
       <p class="sub">Les chauffeurs autour de ${esc(target.name)} le voient maintenant.</p>
       <span class="perk">${moving ? "Pas de points en roulant : signalez à l'arrêt" : `+${gained} ⭐ · ${g[0]} ${g[1]} · ${w.total} pts`}</span>
-      <button class="primary" style="margin-top:22px" data-close>Retour à la carte</button></div>`;
+      ${store.get("beta", null) ? `<button class="primary" style="margin-top:22px" data-close>Retour à la carte</button>` :
+        `<button class="primary" style="margin-top:22px" id="dBeta">📲 Être alerté quand ça bouge ici</button>
+         <p class="sub" style="margin-top:8px">Gratuit pendant la bêta, sur WhatsApp. 30 secondes.</p>
+         <button class="ghost" style="margin-top:6px;padding:10px 0;width:100%;color:var(--mut);font-weight:600" data-close>Plus tard, retour à la carte</button>`}</div>`;
+    const dB = $("#dBeta"); if (dB) dB.onclick = () => { closeModals(); openBeta("apres_signalement"); };
     sel = target; render(false);
   };
   step1(); open("#mReport");
 }
 
 /* ---------- fenêtre « Bêta » ---------- */
-function openBeta(){
+function openBeta(from){
   const p = $("#pBeta");
   const already = store.get("beta", null);
   let plat = [], fu = fuel;
@@ -3791,7 +3795,7 @@ function openBeta(){
   $("#iGo").onclick = () => {
     const row = {prenom: $("#iN").value.trim(), telephone: $("#iP").value.trim(), plateformes: plat.join(", "),
                  carburant: fu, zone: $("#iZ").value, ville: $("#iV").value.trim(), pret_a_payer: wtp, consentement: "oui",
-                 source: new URLSearchParams(location.search).get("src") || "terrain", parrain: new URLSearchParams(location.search).get("ref") || "", pseudo_points: wallet().total};
+                 source: new URLSearchParams(location.search).get("src") || "terrain", parrain: new URLSearchParams(location.search).get("ref") || "", declencheur: from || "bouton", pseudo_points: wallet().total};
     store.set("beta", row); send("beta", row);
     p.innerHTML = `<div class="done"><div class="em">🎉</div><h2>Bienvenue, ${esc(row.prenom)} !</h2>
       <p class="sub">Vous êtes dans les 100 premiers chauffeurs de la bêta. On vous écrit sur WhatsApp dès que les alertes démarrent dans votre secteur.</p>
@@ -3826,7 +3830,7 @@ document.addEventListener("click", e => {
   }
 });
 $("#bReport").onclick = openReport;
-$("#bBeta").onclick = openBeta;
+$("#bBeta").onclick = () => openBeta();
 $("#bShare").onclick = openShare;
 $("#grab").onclick = () => $("#sheet").classList.toggle("small");
 $("#sheet").addEventListener("scroll", () => { if ($("#sheet").scrollTop > 10) $("#sheet").classList.remove("small"); });
