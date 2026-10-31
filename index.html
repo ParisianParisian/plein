@@ -847,6 +847,16 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
 .gps{display:flex;align-items:center;gap:12px;width:100%;padding:14px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-weight:700;text-align:left}
 .switch{display:flex;align-items:center;gap:12px;margin:18px 0 4px;padding:12px 14px;border-radius:14px;background:var(--card2);font-size:14px}
 .switch input{width:22px;height:22px;accent-color:var(--acc);flex:0 0 22px}
+.stars{margin-left:6px;font-size:12px;padding:5px 9px;border-radius:99px;background:var(--card2);color:#FCD34D;font-weight:800;white-space:nowrap}
+.bar{height:10px;border-radius:9px;background:var(--card2);overflow:hidden;margin:8px 0 4px}.bar i{display:block;height:100%;background:linear-gradient(90deg,#22C55E,#FCD34D);border-radius:9px}
+.grade{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+.grade .g{font-size:40px}.grade b{font-size:20px;display:block}
+.kv{display:flex;justify-content:space-between;padding:10px 2px;border-bottom:1px solid var(--line);font-size:15px}.kv span{color:var(--mut)}
+.confirm{display:flex;gap:8px;margin-top:10px}.confirm button{flex:1;padding:11px 6px;border-radius:12px;background:var(--card2);border:1px solid var(--line);font-weight:700;font-size:14px}
+.pop{position:fixed;left:50%;top:40%;z-index:1100;transform:translate(-50%,-50%);font-size:44px;font-weight:900;color:#FCD34D;text-shadow:0 4px 20px rgba(0,0,0,.6);pointer-events:none;animation:pop 1.4s ease forwards}
+@keyframes pop{0%{opacity:0;transform:translate(-50%,-30%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}100%{opacity:0;transform:translate(-50%,-120%) scale(1)}}
+.confetti{position:fixed;inset:0;z-index:1090;pointer-events:none;overflow:hidden}.confetti i{position:absolute;top:-20px;font-style:normal;font-size:22px;animation:fall 1.8s linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
 .hidden{display:none!important}
 </style>
 </head>
@@ -858,7 +868,7 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
   <div class="brand">
     <div class="logo" aria-hidden="true">P</div>
     <div style="min-width:0"><b>Plein</b><button class="zone" id="bZone" aria-label="Changer de ville">📍 <span id="zName">Saint-Germain-en-Laye</span> <i>▾</i></button></div>
-    <span class="pill" id="src">…</span>
+    <span class="pill" id="src">…</span><button class="stars" id="bStars" aria-label="Mon carnet de points">⭐ 0</button>
   </div>
   <div class="fuels" id="fuels" role="group" aria-label="Mon carburant"></div>
 </header>
@@ -895,6 +905,10 @@ input.t,select.t{width:100%;padding:15px 14px;border-radius:12px;background:var(
 <!-- Bêta -->
 <div class="modal" id="mBeta" role="dialog" aria-modal="true" aria-labelledby="bT">
   <div class="panel" id="pBeta"></div>
+</div>
+<!-- Carnet de points -->
+<div class="modal" id="mCarnet" role="dialog" aria-modal="true" aria-labelledby="cT">
+  <div class="panel" id="pCarnet"></div>
 </div>
 <!-- Ville -->
 <div class="modal" id="mZone" role="dialog" aria-modal="true" aria-labelledby="zT">
@@ -3363,6 +3377,77 @@ async function liveStations(c, radius){
   }).filter(s => s.lat && s.lon);
 }
 
+/* ---------- points, grades et carnet fondateur ----------
+   Les points sont gardés dans le téléphone ET envoyés avec chaque signalement : le Sheet fait foi pour les récompenses. */
+const GRADES = [["🥉","Apprenti",0],["🧭","Éclaireur",100],["🚗","Pilote",300],["🎖️","Capitaine",800],["👑","Légende",2000]];
+const PTS = {report: 10, scout: 10, confirm: 3, confirmed: 5, streak: 20};
+const DAILY_CAP = 100, PTS_PER_MONTH = 500, MAX_MONTHS = 3;
+const today = () => new Date().toISOString().slice(0, 10);
+let lastSpeed = 0; // m/s, renseigné par le GPS en mode « autour de moi »
+const wallet = () => store.get("wallet", {total: 0, day: "", dayPts: 0, streak: 0, lastDay: "", log: [], credited: []});
+const gradeOf = n => { let g = GRADES[0]; for (const x of GRADES) if (n >= x[2]) g = x; return g; };
+function award(kind, label, quiet){
+  const w = wallet(), d = today();
+  if (w.day != d){ w.day = d; w.dayPts = 0; }
+  const extra = [];
+  if (w.lastDay != d){ // premier gain de la journée : série
+    const y = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+    w.streak = w.lastDay == y ? w.streak + 1 : 1; w.lastDay = d;
+    if (w.streak == 3) extra.push(["streak", "Série de 3 jours"]);
+  }
+  const before = gradeOf(w.total);
+  let gained = 0;
+  for (const [k, lab] of [[kind, label], ...extra]){
+    const n = Math.min(PTS[k], DAILY_CAP - w.dayPts);
+    if (n <= 0) break;
+    w.total += n; w.dayPts += n; gained += n;
+    w.log.unshift({t: Date.now(), k, n, lab}); w.log = w.log.slice(0, 30);
+  }
+  store.set("wallet", w); paintStars();
+  if (gained){ if (!quiet) pop("+" + gained + " ⭐"); }
+  else if (!quiet) toast("⭐", "<b>Plafond du jour atteint</b>100 points par jour maximum. Revenez demain !");
+  const after = gradeOf(w.total);
+  if (after[1] != before[1]) setTimeout(() => { confetti(); toast(after[0], `<b>Nouveau grade : ${after[1]} !</b>Merci de faire vivre ${esc(zone.name)}.`); }, 900);
+  return gained;
+}
+function paintStars(){ const w = wallet(); $("#bStars").textContent = "⭐ " + w.total; }
+function pop(txt){ const e = document.createElement("div"); e.className = "pop"; e.textContent = txt; document.body.appendChild(e); setTimeout(() => e.remove(), 1500); }
+function confetti(){
+  const c = document.createElement("div"); c.className = "confetti";
+  c.innerHTML = Array.from({length: 24}, (_, i) => `<i style="left:${(i*37)%100}%;animation-delay:${(i%6)*0.12}s">${["⭐","⛽","🎉","✨"][i%4]}</i>`).join("");
+  document.body.appendChild(c); setTimeout(() => c.remove(), 2600);
+}
+function openCarnet(){
+  const w = wallet(), g = gradeOf(w.total), i = GRADES.findIndex(x => x[1] == g[1]), next = GRADES[i+1];
+  const pct = next ? Math.round((w.total - g[2]) / (next[2] - g[2]) * 100) : 100;
+  const months = Math.min(MAX_MONTHS, Math.floor(w.total / PTS_PER_MONTH));
+  const beta = store.get("beta", null);
+  const refUrl = location.href.split("#")[0].split("?")[0] + "?src=parrain&ref=" + deviceId;
+  $("#pCarnet").innerHTML = `<button class="close" data-close>✕</button>
+    <h2 id="cT">Mon carnet</h2>
+    <div class="grade"><span class="g">${g[0]}</span><div style="flex:1"><b>${g[1]}</b><span style="color:var(--mut)">${w.total} points${next ? ` · encore ${next[2] - w.total} pour ${next[0]} ${next[1]}` : " · grade maximum"}</span>
+      <div class="bar"><i style="width:${pct}%"></i></div></div></div>
+    <div class="kv"><span>Aujourd'hui</span><b>${w.day == today() ? w.dayPts : 0} / ${DAILY_CAP}</b></div>
+    <div class="kv"><span>Série</span><b>${w.streak || 0} jour${w.streak > 1 ? "s" : ""} 🔥</b></div>
+    <div class="kv"><span>Valeur au lancement payant</span><b>${months ? "≈ " + months + " mois offert" + (months > 1 ? "s" : "") : (PTS_PER_MONTH - w.total % PTS_PER_MONTH) + " pts avant 1 mois offert"}</b></div>
+    <div class="kv"><span>Statut</span><b>${beta ? "Chauffeur fondateur 🏅" : "Inscrivez-vous à la bêta"}</b></div>
+    <h2 style="font-size:18px;margin-top:18px">Comment gagner des points</h2>
+    <div class="kv"><span>Signalement, à l'arrêt</span><b>+${PTS.report}</b></div>
+    <div class="kv"><span>Station non vue depuis 2 h</span><b>+${PTS.scout}</b></div>
+    <div class="kv"><span>Confirmer « toujours vrai »</span><b>+${PTS.confirm}</b></div>
+    <div class="kv"><span>Votre signalement confirmé par un autre</span><b>+${PTS.confirmed}</b></div>
+    <div class="kv"><span>3 jours d'affilée</span><b>+${PTS.streak}</b></div>
+    <div class="kv"><span>Un chauffeur parrainé qui s'inscrit</span><b>+100</b></div>
+    <button class="primary" id="cRef" style="margin-top:16px">🤝 Parrainer un chauffeur</button>
+    <p class="note">Règles : 500 points = 1 mois offert au lancement de la version payante, 3 mois maximum, sous réserve de ce lancement. Les 100 premiers inscrits gardent le statut fondateur. Les points de parrainage sont crédités après vérification de l'inscription. Points uniquement à l'arrêt, 100 par jour au maximum. Aucun achat n'est nécessaire.</p>
+    ${w.log.length ? `<h2 style="font-size:18px">Derniers gains</h2>` + w.log.slice(0, 6).map(l => `<div class="kv"><span>${esc(l.lab)}</span><b>+${l.n}</b></div>`).join("") : ""}`;
+  $("#cRef").onclick = () => {
+    const text = "Je teste Plein : la station la plus proche qui a ton carburant, sans file. Rejoins la bêta avec mon lien : " + refUrl;
+    if (navigator.share) navigator.share({title: "Plein", text, url: refUrl}).catch(() => {}); else location.href = "https://wa.me/?text=" + encodeURIComponent(text);
+  };
+  open("#mCarnet");
+}
+
 /* ---------- signalements des chauffeurs (Google Sheet) ---------- */
 async function pullReports(){
   if (!SHEET_URL) return [];
@@ -3373,6 +3458,13 @@ async function pullReports(){
 }
 function mergeReports(list){
   const mine = store.get("myReports", []);
+  // Bonus « confirmé » : un autre chauffeur signale la même chose au même endroit dans l'heure qui suit
+  const w = wallet();
+  mine.forEach(m => {
+    if (w.credited.includes(m.t)) return;
+    const hit = list.find(r => r.stationId == m.stationId && r.st == m.st && !r.ex && (+r.t || Date.parse(r.t)) > m.t + 60000 && (+r.t || Date.parse(r.t)) < m.t + 3600000);
+    if (hit){ w.credited.push(m.t); store.set("wallet", w); award("confirmed", "Signalement confirmé par un autre chauffeur"); }
+  });
   [...list, ...mine].forEach(rp => {
     const s = stations.find(x => x.id == rp.stationId); if (!s) return;
     if (rp.fuel && rp.fuel != fuel) return;
@@ -3487,8 +3579,19 @@ function render(fit){
         <span class="fact ${e.lim ? "warn" : ""}">${e.lim ? "<b>Limite de litres</b>" : "Sans limite"}</span>`}
       </div>
       ${trustLine(e)}
+      ${e.by == "drivers" ? `<div class="confirm"><button id="cfYes">👍 Toujours vrai</button><button id="cfNo">👎 Plus vrai</button></div>` : ""}
       ${e.st == "ko" ? `<button class="go" style="background:var(--card2)" id="bBest">→ Station dispo la plus proche</button>`
                      : `<a class="go" href="${waze(shown)}" target="_blank" rel="noopener">🧭 Y aller avec Waze</a>`}`;
+    const cy = $("#cfYes"); if (cy) cy.onclick = () => {
+      const done = store.get("confirmed", {}); const key = shown.id + ":" + fuel;
+      if (done[key] && Date.now() - done[key] < 3600000){ toast("👍", "<b>Déjà confirmé</b>Merci ! Vous pourrez reconfirmer dans une heure."); return; }
+      done[key] = Date.now(); store.set("confirmed", done);
+      shown.reports.push({st: e.st, q: e.q, lim: e.lim, t: Date.now(), n: 1});
+      send("signalement", {points: wallet().total, zone: zone.name, confirmation: "oui", stationId: shown.id, station: shown.name, adresse: shown.addr, carburant: fuel, etat: e.st, file: e.q || "", limite: e.lim ? "oui" : "non"});
+      if (lastSpeed <= 3) award("confirm", "Confirmation · " + shown.name); else toast("🛑", "<b>Confirmation envoyée</b>Pas de points en roulant.");
+      render(false);
+    };
+    const cn = $("#cfNo"); if (cn) cn.onclick = () => { sel = shown; openReport(); };
     const bb = $("#bBest"); if (bb && shown !== best && shown._e.st == "ko") bb.remove(); else if (bb) bb.onclick = () => { sel = null; render(true); };
     if (shown !== best){
       $("#hero").insertAdjacentHTML("beforeend", `<button class="go" id="bBackBest" style="background:var(--card2);margin-top:8px;font-size:16px">↩ Revenir à la meilleure station</button>`);
@@ -3627,12 +3730,17 @@ function openReport(){
     const rp = {stationId: target.id, station: target.name, address: target.addr, fuel, st, q, lim, t: Date.now()};
     const mine = store.get("myReports", []); mine.push(rp); store.set("myReports", mine.slice(-50));
     target.reports.push({st, q, lim, t: Date.now(), n: 1});
-    send("signalement", {zone: zone.name, exemple: mode == "demo" ? "station fictive" : "", stationId: target.id, station: target.name, adresse: target.addr, carburant: fuel, etat: st, file: q, limite: lim ? "oui" : "non",
+    send("signalement", {points: wallet().total, zone: zone.name, exemple: mode == "demo" ? "station fictive" : "", stationId: target.id, station: target.name, adresse: target.addr, carburant: fuel, etat: st, file: q, limite: lim ? "oui" : "non",
                          lat: +target.lat.toFixed(4), lon: +target.lon.toFixed(4)});
-    const count = mine.length;
-    p.innerHTML = `<div class="done"><div class="em">🙌</div><h2>C'est envoyé</h2>
+    const moving = lastSpeed > 3; // plus de 10 km/h : pas de points, la sécurité d'abord
+    const fresh = !target.reports.some(r => !r.ex && r !== target.reports[target.reports.length-1] && Date.now() - r.t < 2*3600000);
+    let gained = 0;
+    if (!moving){ gained = award("report", "Signalement · " + target.name, true); if (fresh && gained) gained += award("scout", "Éclaireur · station non vue depuis 2 h", true);
+      if (gained) pop("+" + gained + " ⭐"); else toast("⭐", "<b>Plafond du jour atteint</b>100 points par jour maximum. Revenez demain !"); }
+    const w = wallet(), g = gradeOf(w.total);
+    p.innerHTML = `<div class="done"><div class="em">${moving ? "🛑" : "🙌"}</div><h2>C'est envoyé</h2>
       <p class="sub">Les chauffeurs autour de ${esc(target.name)} le voient maintenant.</p>
-      <span class="perk">+1 jour gratuit · ${count} signalement${count > 1 ? "s" : ""}</span>
+      <span class="perk">${moving ? "Pas de points en roulant : signalez à l'arrêt" : `+${gained} ⭐ · ${g[0]} ${g[1]} · ${w.total} pts`}</span>
       <button class="primary" style="margin-top:22px" data-close>Retour à la carte</button></div>`;
     sel = target; render(false);
   };
@@ -3683,7 +3791,7 @@ function openBeta(){
   $("#iGo").onclick = () => {
     const row = {prenom: $("#iN").value.trim(), telephone: $("#iP").value.trim(), plateformes: plat.join(", "),
                  carburant: fu, zone: $("#iZ").value, ville: $("#iV").value.trim(), pret_a_payer: wtp, consentement: "oui",
-                 source: new URLSearchParams(location.search).get("src") || "terrain"};
+                 source: new URLSearchParams(location.search).get("src") || "terrain", parrain: new URLSearchParams(location.search).get("ref") || "", pseudo_points: wallet().total};
     store.set("beta", row); send("beta", row);
     p.innerHTML = `<div class="done"><div class="em">🎉</div><h2>Bienvenue, ${esc(row.prenom)} !</h2>
       <p class="sub">Vous êtes dans les 100 premiers chauffeurs de la bêta. On vous écrit sur WhatsApp dès que les alertes démarrent dans votre secteur.</p>
@@ -3696,7 +3804,7 @@ function openBeta(){
 /* ---------- fenêtre « Partager » (QR code pour le terrain) ---------- */
 function openShare(){
   const slug = zone.gps ? "" : "&ville=" + zone.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f'’]/g, "").replace(/\s+/g, "-");
-  const url = location.href.split("#")[0].split("?")[0] + "?src=qr" + slug; // le chauffeur ouvre directement sur la même ville
+  const url = location.href.split("#")[0].split("?")[0] + "?src=qr" + slug + "&ref=" + deviceId; // parrainage : le QR porte votre code // le chauffeur ouvre directement sur la même ville
   try{
     const qr = qrcode(0, "M"); qr.addData(url); qr.make();
     $("#qr").innerHTML = qr.createSvgTag({cellSize: 6, margin: 0, scalable: true});
@@ -3788,6 +3896,7 @@ let watchId = null, lastLoadAt = null, lastDraw = 0;
 function follow(){ // en mode « autour de moi », le point bleu suit le chauffeur ; au-delà de 1,5 km on recharge les stations
   if (watchId != null) navigator.geolocation.clearWatch(watchId);
   watchId = navigator.geolocation.watchPosition(p => {
+    lastSpeed = p.coords.speed || 0;
     if (!zone.gps) return;
     const pos = [p.coords.latitude, p.coords.longitude];
     if (lastLoadAt && km(lastLoadAt, pos) > 1.5){ zone.c = pos; lastLoadAt = pos; load(); return; }
@@ -3818,6 +3927,8 @@ function openZone(){
 }
 function closeModals(){ document.querySelectorAll(".modal.open").forEach(m => m.classList.remove("open")); }
 $("#bZone").onclick = openZone;
+$("#bStars").onclick = openCarnet;
+paintStars();
 $("#bCenter").onclick = () => { if (zone.gps) useGps(); else { sel = null; render(true); } };
 
 function start(how){
